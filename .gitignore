@@ -1,5 +1,17 @@
 node_modules/
+dist/
 out/
 tmp/
 *.log
 .DS_Store
+
+# Local test config holds a password
+config/test.env
+
+# Playwright
+test-results/
+playwright-report/
+.playwright/
+
+# Local scratch
+scratch/

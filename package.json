@@ -1,0 +1,27 @@
+{
+  "name": "quick-export",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Export a single Aras item to native-identical XML from the Aras web client, on any Aras 12+ instance, with no instance-specific deployment. Stateless local host service + browser extension.",
+  "type": "module",
+  "main": "dist/service/index.js",
+  "bin": {
+    "quick-export-service": "dist/service/index.js"
+  },
+  "scripts": {
+    "service": "tsx src/service/index.ts",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:live": "vitest run --config vitest.live.config.ts",
+    "test:e2e": "playwright test",
+    "build": "tsc -p tsconfig.build.json"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.61.1",
+    "@types/node": "^24.0.0",
+    "tsx": "^4.19.0",
+    "typescript": "^5.6.0",
+    "vitest": "^2.1.0"
+  }
+}
