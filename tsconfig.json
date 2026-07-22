@@ -13,8 +13,16 @@
     "resolveJsonModule": true,
     "verbatimModuleSyntax": true,
     "isolatedModules": true,
-    "noEmit": true
+    "noEmit": true,
+    "allowJs": true,
+    "checkJs": false
   },
   "include": ["src", "tests"],
-  "exclude": ["node_modules", "dist", "src/extension"]
+  "exclude": [
+    "node_modules",
+    "dist",
+    "src/extension/injected.js",
+    "src/extension/content.js",
+    "src/extension/background.js"
+  ]
 }
