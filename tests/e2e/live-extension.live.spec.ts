@@ -5,20 +5,18 @@
  * Self-skips unless QE_LIVE_E2E=1. It also needs, because automated login is intentionally
  * out of scope (the tool never types passwords):
  *   - the quick-export service running:            npm run service
- *   - a logged-in session saved as storageState:   QE_STORAGE_STATE=path/to/state.json
- *     (create once: `npx playwright open --save-storage=state.json http://localhost/12sp9/Client/`,
- *      log in by hand, then close)
+ *   - a persistent Chromium profile that is already logged in. Point QE_USER_DATA_DIR at a
+ *     profile dir; run once headed, log into Aras by hand, and the session persists for reruns.
  *   - ARAS_CLIENT_URL pointing at the client (defaults to http://localhost/12sp9/Client/)
  *
- * Enable:  QE_LIVE_E2E=1 QE_STORAGE_STATE=state.json npm run test:e2e
+ * Enable:  QE_LIVE_E2E=1 QE_USER_DATA_DIR=.pw-profile npm run test:e2e
  */
 import { test, expect, chromium, type BrowserContext } from '@playwright/test'
-import { existsSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
 
 const ENABLED = process.env.QE_LIVE_E2E === '1'
 const EXT_PATH = fileURLToPath(new URL('../../src/extension', import.meta.url))
-const STORAGE = process.env.QE_STORAGE_STATE
+const USER_DATA_DIR = process.env.QE_USER_DATA_DIR ?? ''
 const CLIENT_URL = process.env.ARAS_CLIENT_URL ?? 'http://localhost/12sp9/Client/'
 
 test.describe('live extension end-to-end', () => {
@@ -27,11 +25,11 @@ test.describe('live extension end-to-end', () => {
   let context: BrowserContext
 
   test.beforeAll(async () => {
-    // MV3 extensions require a persistent context with the extension loaded.
-    context = await chromium.launchPersistentContext('', {
+    // MV3 extensions require a persistent context with the extension loaded. A persistent
+    // user-data dir also carries the logged-in Aras session across runs.
+    context = await chromium.launchPersistentContext(USER_DATA_DIR, {
       headless: false,
-      args: [`--disable-extensions-except=${EXT_PATH}`, `--load-extension=${EXT_PATH}`],
-      storageState: STORAGE && existsSync(STORAGE) ? STORAGE : undefined
+      args: [`--disable-extensions-except=${EXT_PATH}`, `--load-extension=${EXT_PATH}`]
     })
   })
 
