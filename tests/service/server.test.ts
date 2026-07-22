@@ -1,6 +1,11 @@
 import { describe, it, expect, beforeAll, afterAll } from 'vitest'
-import type { Server } from 'node:http'
-import { createQuickExportServer } from '../../src/service/server.js'
+import { createServer, type Server } from 'node:http'
+import {
+  createQuickExportServer,
+  startServer,
+  startServiceTolerant,
+  isServiceHealthy
+} from '../../src/service/server.js'
 import type { ExportRequest, ExportResult } from '../../src/core/types.js'
 import { ErrorCode } from '../../src/core/types.js'
 
@@ -116,5 +121,63 @@ describe('unknown routes', () => {
   it('404s', async () => {
     const r = await fetch(`${base}/nope`)
     expect(r.status).toBe(404)
+  })
+})
+
+describe('isServiceHealthy', () => {
+  it('true against a running quick-export server', async () => {
+    const { server: s, port } = await startServer({ version: '9.9.9' }, 0)
+    try {
+      expect(await isServiceHealthy(port)).toBe(true)
+    } finally {
+      s.close()
+    }
+  })
+
+  it('false against a closed port', async () => {
+    // Bind then close to get a very-likely-free port, then probe it.
+    const { server: s, port } = await startServer({ version: '9.9.9' }, 0)
+    await new Promise<void>((r) => s.close(() => r()))
+    expect(await isServiceHealthy(port, '127.0.0.1', 500)).toBe(false)
+  })
+})
+
+describe('startServiceTolerant (collision-tolerant startup)', () => {
+  it('binds a free port -> listening', async () => {
+    const outcome = await startServiceTolerant({ version: '9.9.9' }, 0)
+    expect(outcome.status).toBe('listening')
+    expect(outcome.server).toBeDefined()
+    expect(outcome.port).toBeGreaterThan(0)
+    outcome.server?.close()
+  })
+
+  it('defers when the port is already served by a quick-export instance', async () => {
+    // First instance grabs an ephemeral port; a second start on it must defer, not crash.
+    const first = await startServer({ version: '9.9.9' }, 0)
+    try {
+      const outcome = await startServiceTolerant({ version: '9.9.9' }, first.port)
+      expect(outcome.status).toBe('deferred')
+      expect(outcome.server).toBeUndefined()
+    } finally {
+      first.server.close()
+    }
+  })
+
+  it('errors when the port is held by a non-quick-export program', async () => {
+    // A plain server whose /health does NOT identify as quick-export.
+    const intruder = createServer((_req, res) => {
+      res.writeHead(200)
+      res.end('not me')
+    })
+    await new Promise<void>((r) => intruder.listen(0, '127.0.0.1', r))
+    const addr = intruder.address()
+    const port = typeof addr === 'object' && addr ? addr.port : 0
+    try {
+      const outcome = await startServiceTolerant({ version: '9.9.9' }, port)
+      expect(outcome.status).toBe('error')
+      expect(outcome.message).toMatch(/held by another program/)
+    } finally {
+      intruder.close()
+    }
   })
 })

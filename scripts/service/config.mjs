@@ -15,8 +15,12 @@ export const SERVICE_DESCRIPTION =
 /** The built server entry the service/launcher runs (see `npm run build`). */
 export const ENTRY = join(REPO_ROOT, 'dist', 'service', 'index.js')
 
-/** Loopback port (matches the extension + service default). */
-export const PORT = Number(process.env.QUICK_EXPORT_PORT ?? 8737)
+/**
+ * Loopback port. FIXED — must match DEFAULT_PORT in src/service/server.ts and the
+ * host_permissions entry in src/extension/manifest.json. Not env-configurable: the extension
+ * reaches the service through a pinned manifest host, so a movable port would break it.
+ */
+export const PORT = 8737
 
 /** HKCU "Run" value name — shows up in Task Manager > Startup. */
 export const RUN_KEY_PATH = 'HKCU\\Software\\Microsoft\\Windows\\CurrentVersion\\Run'

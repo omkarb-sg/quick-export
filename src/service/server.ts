@@ -129,3 +129,58 @@ export function startServer(deps: ServerDeps = {}, port: number = DEFAULT_PORT, 
     })
   })
 }
+
+/**
+ * Probe GET /health on a loopback port. Resolves true iff a *quick-export* service answers —
+ * used to tell "our own instance already holds the port" from "some other program grabbed it".
+ */
+export async function isServiceHealthy(port: number, host = '127.0.0.1', timeoutMs = 1500): Promise<boolean> {
+  try {
+    const res = await fetch(`http://${host}:${port}/health`, { signal: AbortSignal.timeout(timeoutMs) })
+    if (!res.ok) return false
+    const body = (await res.json()) as { name?: string }
+    return body?.name === SERVICE_NAME
+  } catch {
+    return false
+  }
+}
+
+export type StartStatus = 'listening' | 'deferred' | 'error'
+
+export interface StartOutcome {
+  status: StartStatus
+  port: number
+  /** Present only when status === 'listening'. */
+  server?: Server
+  message: string
+}
+
+/**
+ * Start the service, tolerating the fixed port already being held:
+ *   free port                       -> 'listening' (we bound it)
+ *   held by a healthy quick-export  -> 'deferred'  (another instance already serves; no-op)
+ *   held by something else / error  -> 'error'
+ *
+ * Makes startup idempotent so the boot Windows service and the login launcher can race the port
+ * without one crashing the other. The port is FIXED because the extension's host_permissions pin
+ * it — see DEFAULT_PORT here and host_permissions in src/extension/manifest.json.
+ */
+export async function startServiceTolerant(
+  deps: ServerDeps = {},
+  port: number = DEFAULT_PORT,
+  host = '127.0.0.1'
+): Promise<StartOutcome> {
+  try {
+    const { server, port: bound } = await startServer(deps, port, host)
+    return { status: 'listening', port: bound, server, message: `listening on http://${host}:${bound}` }
+  } catch (e) {
+    const err = e as NodeJS.ErrnoException
+    if (err.code === 'EADDRINUSE') {
+      if (await isServiceHealthy(port, host)) {
+        return { status: 'deferred', port, message: `port ${port} already served by another quick-export instance — nothing to do` }
+      }
+      return { status: 'error', port, message: `port ${port} is held by another program (not quick-export). Free it and retry.` }
+    }
+    return { status: 'error', port, message: `failed to start: ${err.message}` }
+  }
+}

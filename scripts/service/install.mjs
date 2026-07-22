@@ -82,8 +82,7 @@ function addStartupApp() {
 const svc = new Service({
   name: SERVICE_NAME,
   description: SERVICE_DESCRIPTION,
-  script: ENTRY,
-  env: [{ name: 'QUICK_EXPORT_PORT', value: String(PORT) }]
+  script: ENTRY
 })
 
 svc.on('alreadyinstalled', () => {

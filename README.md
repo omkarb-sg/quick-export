@@ -63,7 +63,9 @@ npm install
 npm run service          # listens on http://127.0.0.1:8737
 ```
 
-Keep it running while you use the extension. Change the port with `QUICK_EXPORT_PORT=…`.
+Keep it running while you use the extension. It listens on a **fixed** port (`8737`) that the
+extension is pinned to (`host_permissions` in the manifest); startup is collision-tolerant, so if
+another quick-export instance already holds the port it defers instead of crashing.
 
 ### Run it automatically (recommended)
 
@@ -85,9 +87,8 @@ conflict. `uninstall` removes both. With this in place, just load the extension 
 
 1. Chrome/Edge → `chrome://extensions` → enable **Developer mode**.
 2. **Load unpacked** → select `src/extension/`.
-3. The content script targets `http://localhost/*` by default. For a different host, add your
-   instance to `matches`, `web_accessible_resources[].matches`, and `host_permissions` in
-   `src/extension/manifest.json`, then reload.
+3. No manifest edit needed: it activates on **any** host and gates itself to Aras by the
+   `/Client` path, so it works on any Aras 12+ instance you're logged into out of the box.
 
 ## Use it
 

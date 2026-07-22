@@ -4,27 +4,32 @@
  *
  * Stateless: it opens no Aras connection of its own and stores nothing between requests.
  * Each POST /export carries its own {url, database, token} and runs in its own child process.
+ *
+ * The port is FIXED (DEFAULT_PORT): the extension reaches the service through a pinned
+ * host_permissions entry in the manifest, so a movable port would silently break the extension.
+ * Startup is collision-tolerant — if the port is already served by another quick-export instance
+ * (e.g. boot Windows service vs. login launcher racing), we defer instead of crashing.
  */
-import { startServer, DEFAULT_PORT, SERVICE_NAME } from './server.js'
+import { SERVICE_NAME, startServiceTolerant } from './server.js'
 
 const VERSION = '0.1.0'
 
 async function main(): Promise<void> {
-  const port = Number(process.env.QUICK_EXPORT_PORT ?? DEFAULT_PORT)
-  try {
-    const { port: bound } = await startServer({ version: VERSION }, port)
-    // eslint-disable-next-line no-console
-    console.log(`${SERVICE_NAME} v${VERSION} listening on http://127.0.0.1:${bound}`)
-    console.log(`  GET  /health`)
-    console.log(`  POST /export`)
-  } catch (e) {
-    const err = e as NodeJS.ErrnoException
-    if (err.code === 'EADDRINUSE') {
-      console.error(`Port ${port} is in use. Set QUICK_EXPORT_PORT to a free port and retry.`)
-    } else {
-      console.error(`Failed to start ${SERVICE_NAME}: ${err.message}`)
-    }
-    process.exitCode = 1
+  const outcome = await startServiceTolerant({ version: VERSION })
+  switch (outcome.status) {
+    case 'listening':
+      // eslint-disable-next-line no-console
+      console.log(`${SERVICE_NAME} v${VERSION} ${outcome.message}`)
+      console.log(`  GET  /health`)
+      console.log(`  POST /export`)
+      break
+    case 'deferred':
+      console.log(`${SERVICE_NAME} v${VERSION}: ${outcome.message}`)
+      break
+    case 'error':
+      console.error(`${SERVICE_NAME}: ${outcome.message}`)
+      process.exitCode = 1
+      break
   }
 }
 
