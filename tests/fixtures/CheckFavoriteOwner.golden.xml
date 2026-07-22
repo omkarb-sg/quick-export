@@ -1,0 +1,18 @@
+﻿<AML>
+ <Item type="Method" id="08BE5CE05D8D45F5A11EFFE699A9C65D" action="add">
+  <execution_allowed_to keyed_name="World" type="Identity">A73B655731924CD0B027E4F4D5FCC0A9</execution_allowed_to>
+  <method_code><![CDATA[Item ownerItem = this.newItem("Identity", "get");
+ownerItem.setAttribute("select", "is_alias");
+ownerItem.setID(this.getProperty("owned_by_id"));
+ownerItem = ownerItem.apply();
+
+if (ownerItem.getProperty("is_alias") != "1")
+{
+	throw new Aras.Server.Core.InnovatorServerException("Only Identities with \"is_alias\"=true can be owners of Favorite and FavoriteFolders.");
+}
+
+return this;]]></method_code>
+  <method_type>C#</method_type>
+  <name>CheckFavoriteOwner</name>
+ </Item>
+</AML>

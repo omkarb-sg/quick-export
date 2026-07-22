@@ -42,7 +42,8 @@ param(
     [Parameter(Mandatory)][string] $GroupsJson,
     # Password mode only. Token mode reads $env:ARAS_TOKEN.
     [string] $ArasUser  = '',
-    [bool]   $ExportReferenced = $true,
+    # String (not [bool]) so it binds cleanly from a spawned argv; converted below.
+    [string] $ExportReferenced = 'true',
     [int]    $Timeout          = 1200000
 )
 
@@ -196,9 +197,11 @@ public static class QuickExportRunner {
 "@
     Add-Type -TypeDefinition $code -ReferencedAssemblies @($iom, $libs)
 
+    $exportRef = @('true','1','$true','yes') -contains ($ExportReferenced.ToLowerInvariant())
+
     $errors = [QuickExportRunner]::Run(
         $ArasUrl, $ArasDatabase, $useToken, [string]$token, $ArasUser, [string]$pw,
-        $OutDir, $LogFile, $Timeout, $ExportReferenced,
+        $OutDir, $LogFile, $Timeout, $exportRef,
         $pkgArr.ToArray(), $typeArr.ToArray(), $idArr.ToArray(), $nameArr.ToArray())
 
     $xml = Get-ChildItem -Path $OutDir -Recurse -Filter *.xml -File -ErrorAction SilentlyContinue

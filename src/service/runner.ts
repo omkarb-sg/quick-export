@@ -105,7 +105,7 @@ export async function runExport(req: ExportRequest, deps: RunnerDeps = {}): Prom
       '-IomDll', res.iomDll,
       '-LibsDll', res.libsDll,
       '-GroupsJson', JSON.stringify(groups),
-      '-ExportReferenced', req.options?.exportReferenced === false ? '$false' : '$true'
+      '-ExportReferenced', req.options?.exportReferenced === false ? 'false' : 'true'
     ]
     // Token travels via env, never argv — keeps it out of the process table / any log.
     const run = await runner(res.exportScript, args, { ARAS_TOKEN: req.conn.token })
