@@ -1,0 +1,23 @@
+{
+  "manifest_version": 3,
+  "name": "quick-export (Aras)",
+  "version": "0.1.0",
+  "description": "Export the currently open Aras item to native-identical XML, on any Aras 12+ instance you're logged into.",
+  "background": { "service_worker": "background.js", "type": "module" },
+  "content_scripts": [
+    {
+      "matches": ["http://localhost/*", "https://localhost/*"],
+      "js": ["content.js"],
+      "run_at": "document_idle",
+      "all_frames": false
+    }
+  ],
+  "web_accessible_resources": [
+    {
+      "resources": ["injected.js", "lib/aras-page.js"],
+      "matches": ["http://localhost/*", "https://localhost/*"]
+    }
+  ],
+  "host_permissions": ["http://127.0.0.1:8737/*", "http://localhost/*", "https://localhost/*"],
+  "permissions": ["storage"]
+}
