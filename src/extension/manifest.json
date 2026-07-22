@@ -6,7 +6,7 @@
   "background": { "service_worker": "background.js", "type": "module" },
   "content_scripts": [
     {
-      "matches": ["http://localhost/*", "https://localhost/*"],
+      "matches": ["http://*/*", "https://*/*"],
       "js": ["content.js"],
       "run_at": "document_idle",
       "all_frames": false
@@ -15,9 +15,9 @@
   "web_accessible_resources": [
     {
       "resources": ["injected.js", "lib/aras-page.js"],
-      "matches": ["http://localhost/*", "https://localhost/*"]
+      "matches": ["http://*/*", "https://*/*"]
     }
   ],
-  "host_permissions": ["http://127.0.0.1:8737/*", "http://localhost/*", "https://localhost/*"],
+  "host_permissions": ["http://127.0.0.1:8737/*"],
   "permissions": ["storage"]
 }

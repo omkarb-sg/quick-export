@@ -1,11 +1,21 @@
 /**
- * Content script (isolated world). It cannot see the page's `top.aras`, so it:
- *   1. injects injected.js into the page (MAIN world) and talks to it via window.postMessage,
- *   2. renders the Quick Export button + result panel (in a shadow root, CSS-isolated),
- *   3. relays the export to the background service worker, which calls the local service.
+ * Content script (isolated world), injected on every http/https page. It:
+ *   1. activates only on an Aras web client (path contains /Client) and only once it confirms
+ *      the page really exposes `top.aras` — so it stays invisible everywhere else,
+ *   2. injects injected.js into the page (MAIN world) and talks to it via window.postMessage,
+ *   3. renders the Quick Export button + result panel (shadow root, CSS-isolated),
+ *   4. relays the export to the background service worker, which calls the local service.
+ *
+ * Works on ANY Aras 12+ instance (any host) — nothing is hardcoded to a specific server.
  */
 ;(function () {
   if (window.__quickExportLoaded) return
+
+  // Cheap gate: the Aras web client is always served under `.../Client/`. Everything else is
+  // ignored so the button never appears on non-Aras pages. `__quickExportForce` is a test hook.
+  const looksLikeAras = /\/Client(\/|$)/i.test(location.pathname) || window.__quickExportForce === true
+  if (!looksLikeAras) return
+
   window.__quickExportLoaded = true
 
   // --- Inject the page-world bridge ---
@@ -26,7 +36,7 @@
     pending.delete(d.id)
     d.ok ? p.resolve(d.result) : p.reject(new Error(d.error || 'unknown page error'))
   })
-  function callInjected(action, payload) {
+  function callInjected(action, payload, timeoutMs = 20000) {
     return new Promise((resolve, reject) => {
       const id = 'c' + ++seq
       pending.set(id, { resolve, reject })
@@ -36,16 +46,36 @@
           pending.delete(id)
           reject(new Error('page bridge timed out (is the Aras client fully loaded?)'))
         }
-      }, 20000)
+      }, timeoutMs)
     })
   }
 
-  // --- UI (shadow DOM) ---
-  const host = document.createElement('div')
-  host.id = 'quick-export-host'
-  document.documentElement.appendChild(host)
-  const root = host.attachShadow({ mode: 'open' })
-  root.innerHTML = `
+  // Poll the page for `top.aras` (it loads asynchronously). Mount the UI once confirmed; give
+  // up quietly on pages that turn out not to be an Aras client.
+  async function waitForAras() {
+    for (let i = 0; i < 25; i++) {
+      try {
+        const r = await callInjected('hasAras', undefined, 1200)
+        if (r && r.hasAras) return true
+      } catch {
+        /* not ready yet */
+      }
+      await new Promise((r) => setTimeout(r, 1500))
+    }
+    return false
+  }
+
+  waitForAras().then((ok) => {
+    if (ok) mountUI()
+  })
+
+  // --- UI (shadow DOM), mounted only after Aras is confirmed ---
+  function mountUI() {
+    const host = document.createElement('div')
+    host.id = 'quick-export-host'
+    document.documentElement.appendChild(host)
+    const root = host.attachShadow({ mode: 'open' })
+    root.innerHTML = `
     <style>
       :host { all: initial; }
       .btn {
@@ -94,120 +124,113 @@
       </div>
     </section>`
 
-  const $ = (sel) => root.querySelector(sel)
-  const panel = $('.panel')
-  const metaEl = $('.meta')
-  const statusEl = $('.status')
-  const ta = $('textarea')
-  const addBtn = $('.addpkg')
-  const copyBtn = $('.copy')
-  const dlBtn = $('.download')
-  let current = null // { filename, xml }
+    const $ = (sel) => root.querySelector(sel)
+    const panel = $('.panel')
+    const metaEl = $('.meta')
+    const statusEl = $('.status')
+    const ta = $('textarea')
+    const addBtn = $('.addpkg')
+    const copyBtn = $('.copy')
+    const dlBtn = $('.download')
+    let current = null // { filename, xml }
 
-  function openPanel() { panel.classList.add('open') }
-  function closePanel() { panel.classList.remove('open') }
-  function setStatus(msg, isErr) {
-    statusEl.textContent = msg
-    statusEl.className = 'status' + (isErr ? ' err' : '')
-  }
-  function resetView() {
-    metaEl.innerHTML = ''
-    ta.hidden = true
-    ta.value = ''
-    addBtn.hidden = true
-    copyBtn.hidden = true
-    dlBtn.hidden = true
-    current = null
-  }
-
-  function showItemMeta(item, pkg) {
-    metaEl.innerHTML =
-      `<b>${escapeHtml(item.keyedName)}</b> · ${escapeHtml(item.itemType)}` +
-      (pkg ? ` · <span title="package">${escapeHtml(pkg)}</span>` : '')
-  }
-
-  function showXml(filename, xml, pkg, item) {
-    showItemMeta(item, pkg)
-    setStatus(`Exported ${filename}`)
-    ta.hidden = false
-    ta.value = xml
-    copyBtn.hidden = false
-    dlBtn.hidden = false
-    current = { filename, xml }
-  }
-
-  async function run() {
-    openPanel()
-    resetView()
-    setStatus('Reading the open item…')
-    let ctx
-    try {
-      ctx = await callInjected('getContext')
-    } catch (e) {
-      setStatus(e.message, true)
-      return
+    const openPanel = () => panel.classList.add('open')
+    const closePanel = () => panel.classList.remove('open')
+    function setStatus(msg, isErr) {
+      statusEl.textContent = msg
+      statusEl.className = 'status' + (isErr ? ' err' : '')
     }
-    if (!ctx.inPackage) {
-      showItemMeta(ctx.item, '')
-      setStatus(
-        'This item is not in any package, so it cannot be exported. ' +
-          'Add it to a package first (D-01), then export again.'
-      )
-      addBtn.hidden = false
-      addBtn.onclick = async () => {
-        try {
-          await callInjected('addToPackage', ctx.item)
-          setStatus("Opened Aras's Add-to-Package dialog. After you finish, click Export again.")
-          addBtn.hidden = true
-        } catch (e) {
-          setStatus(e.message, true)
-        }
+    function resetView() {
+      metaEl.innerHTML = ''
+      ta.hidden = true
+      ta.value = ''
+      addBtn.hidden = true
+      copyBtn.hidden = true
+      dlBtn.hidden = true
+      current = null
+    }
+    function showItemMeta(item, pkg) {
+      metaEl.innerHTML =
+        `<b>${escapeHtml(item.keyedName)}</b> · ${escapeHtml(item.itemType)}` +
+        (pkg ? ` · <span title="package">${escapeHtml(pkg)}</span>` : '')
+    }
+    function showXml(filename, xml, pkg, item) {
+      showItemMeta(item, pkg)
+      setStatus(`Exported ${filename}`)
+      ta.hidden = false
+      ta.value = xml
+      copyBtn.hidden = false
+      dlBtn.hidden = false
+      current = { filename, xml }
+    }
+
+    async function run() {
+      openPanel()
+      resetView()
+      setStatus('Reading the open item…')
+      let ctx
+      try {
+        ctx = await callInjected('getContext')
+      } catch (e) {
+        setStatus(e.message, true)
+        return
       }
-      return
+      if (!ctx.inPackage) {
+        showItemMeta(ctx.item, '')
+        setStatus('This item is not in any package, so it cannot be exported. Add it to a package first, then export again.')
+        addBtn.hidden = false
+        addBtn.onclick = async () => {
+          try {
+            await callInjected('addToPackage', ctx.item)
+            setStatus("Opened Aras's Add-to-Package dialog. After you finish, click Export again.")
+            addBtn.hidden = true
+          } catch (e) {
+            setStatus(e.message, true)
+          }
+        }
+        return
+      }
+      setStatus(`Exporting ${ctx.item.keyedName}…`)
+      let result
+      try {
+        result = await chrome.runtime.sendMessage({ type: 'qe:export', body: ctx.request })
+      } catch (e) {
+        setStatus('Extension messaging error: ' + e.message, true)
+        return
+      }
+      if (!result || !result.ok) {
+        setStatus((result && result.error) || 'Export failed.', true)
+        showItemMeta(ctx.item, ctx.packageName)
+        return
+      }
+      showXml(result.filename, result.xml, ctx.packageName, ctx.item)
     }
-    setStatus(`Exporting ${ctx.item.keyedName}…`)
-    let result
-    try {
-      result = await chrome.runtime.sendMessage({ type: 'qe:export', body: ctx.request })
-    } catch (e) {
-      setStatus('Extension messaging error: ' + e.message, true)
-      return
-    }
-    if (!result || !result.ok) {
-      setStatus((result && result.error) || 'Export failed.', true)
-      showItemMeta(ctx.item, ctx.packageName)
-      return
-    }
-    showXml(result.filename, result.xml, ctx.packageName, ctx.item)
-  }
 
-  copyBtn.onclick = async () => {
-    if (!current) return
-    try {
-      await navigator.clipboard.writeText(current.xml)
-      const t = copyBtn.textContent
-      copyBtn.textContent = 'Copied ✓'
-      setTimeout(() => (copyBtn.textContent = t), 1200)
-    } catch {
-      // Fallback: select the textarea for manual copy.
-      ta.focus()
-      ta.select()
+    copyBtn.onclick = async () => {
+      if (!current) return
+      try {
+        await navigator.clipboard.writeText(current.xml)
+        const t = copyBtn.textContent
+        copyBtn.textContent = 'Copied ✓'
+        setTimeout(() => (copyBtn.textContent = t), 1200)
+      } catch {
+        ta.focus()
+        ta.select()
+      }
     }
+    dlBtn.onclick = () => {
+      if (!current) return
+      // Blob from the string preserves the UTF-8 BOM (leading U+FEFF) and CRLFs — byte-fidelity.
+      const blob = new Blob([current.xml], { type: 'application/xml' })
+      const a = document.createElement('a')
+      a.href = URL.createObjectURL(blob)
+      a.download = current.filename
+      a.click()
+      setTimeout(() => URL.revokeObjectURL(a.href), 2000)
+    }
+    $('.btn').onclick = run
+    $('.x').onclick = closePanel
   }
-
-  dlBtn.onclick = () => {
-    if (!current) return
-    // Blob from the string preserves the UTF-8 BOM (leading U+FEFF) and CRLFs — byte-fidelity.
-    const blob = new Blob([current.xml], { type: 'application/xml' })
-    const a = document.createElement('a')
-    a.href = URL.createObjectURL(blob)
-    a.download = current.filename
-    a.click()
-    setTimeout(() => URL.revokeObjectURL(a.href), 2000)
-  }
-
-  $('.btn').onclick = run
-  $('.x').onclick = closePanel
 
   function escapeHtml(s) {
     return String(s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c])

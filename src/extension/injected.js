@@ -61,7 +61,8 @@ window.addEventListener('message', (ev) => {
   let result
   let error
   try {
-    if (d.action === 'getContext') result = getContext()
+    if (d.action === 'hasAras') result = { hasAras: !!arasObj() }
+    else if (d.action === 'getContext') result = getContext()
     else if (d.action === 'addToPackage') result = addToPackage(d.payload)
     else throw new Error('unknown action: ' + d.action)
   } catch (e) {

@@ -15,6 +15,7 @@ async function setup(page: import('@playwright/test').Page, opts: { inPackage: b
   await page.setContent('<!doctype html><meta charset="utf-8"><title>aras stub</title><body></body>')
   await page.evaluate((inPackage) => {
     ;(window as any).__sent = null
+    ;(window as any).__quickExportForce = true // bypass the /Client path gate on about:blank
     // about:blank is not a secure context, so navigator.clipboard is undefined — stub it
     // to capture what content.js copies.
     Object.defineProperty(navigator, 'clipboard', {
@@ -39,6 +40,10 @@ async function setup(page: import('@playwright/test').Page, opts: { inPackage: b
     window.addEventListener('message', (ev: any) => {
       const d = ev.data
       if (!d || d.__qe !== 'req') return
+      if (d.action === 'hasAras') {
+        window.postMessage({ __qe: 'res', id: d.id, ok: true, result: { hasAras: true } }, '*')
+        return
+      }
       if (d.action === 'getContext') {
         const item = { itemType: 'Method', itemId: '08BE', configId: 'CFG', keyedName: 'CheckFavoriteOwner' }
         const result = inPackage
