@@ -65,6 +65,22 @@ npm run service          # listens on http://127.0.0.1:8737
 
 Keep it running while you use the extension. Change the port with `QUICK_EXPORT_PORT=…`.
 
+### Run it automatically (recommended)
+
+So you never have to start it by hand, install it as a background service + startup app
+(**Windows, admin** — the scripts self-elevate):
+
+```
+install.cmd      # or: npm run service:install   (from an elevated terminal)
+uninstall.cmd    # or: npm run service:uninstall
+```
+
+`install` (1) builds the server, (2) creates and starts a **Windows service**
+(`QuickExport Aras Export Service`, auto-start at boot), and (3) adds a **startup app**
+(HKCU `Run` → a hidden launcher, visible in Task Manager → Startup). The startup launcher only
+starts the server if it isn't already running, so the service and the startup entry never
+conflict. `uninstall` removes both. With this in place, just load the extension and go.
+
 ## Load the extension
 
 1. Chrome/Edge → `chrome://extensions` → enable **Developer mode**.

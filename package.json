@@ -15,7 +15,9 @@
     "test:watch": "vitest",
     "test:live": "vitest run --config vitest.live.config.ts",
     "test:e2e": "playwright test",
-    "build": "tsc -p tsconfig.build.json"
+    "build": "tsc -p tsconfig.build.json",
+    "service:install": "node scripts/service/install.mjs",
+    "service:uninstall": "node scripts/service/uninstall.mjs"
   },
   "devDependencies": {
     "@playwright/test": "^1.61.1",
@@ -23,5 +25,8 @@
     "tsx": "^4.19.0",
     "typescript": "^5.6.0",
     "vitest": "^2.1.0"
+  },
+  "dependencies": {
+    "node-windows": "^1.0.0-beta.8"
   }
 }
