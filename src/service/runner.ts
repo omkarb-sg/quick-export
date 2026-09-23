@@ -112,7 +112,7 @@ export async function runExport(req: ExportRequest, deps: RunnerDeps = {}): Prom
     const parsed = parseExportStdout(run.stdout)
 
     if (!parsed.ok || run.exitCode !== 0) {
-      const reason = parsed.failReason ?? run.stderr.trim() ?? `host child exited ${run.exitCode}`
+      const reason = parsed.failReason || run.stderr.trim() || `host child exited ${run.exitCode}`
       return fail(req.reqId, classifyFailure(reason), reason, parsed.engineErrors)
     }
     if (parsed.engineErrors > 0) {

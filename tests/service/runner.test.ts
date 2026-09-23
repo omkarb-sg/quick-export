@@ -80,6 +80,13 @@ describe('runExport', () => {
     expect(res.code).toBe(ErrorCode.AUTH)
   })
 
+  it('reports the exit code when the child dies with no QE_FAIL and empty stderr', async () => {
+    const runner: ScriptRunner = async () => ({ exitCode: 3, stdout: '', stderr: '  \n' })
+    const res = await runExport(REQ, { ...baseDeps, runner })
+    expect(res.ok).toBe(false)
+    expect(res.error).toBe('host child exited 3')
+  })
+
   it('maps engine errors to code FAULT (partial result)', async () => {
     const runner: ScriptRunner = async (_s, args) => {
       const outDir = args[args.indexOf('-OutDir') + 1]!
