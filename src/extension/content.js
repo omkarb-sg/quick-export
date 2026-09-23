@@ -133,6 +133,9 @@
     const copyBtn = $('.copy')
     const dlBtn = $('.download')
     let current = null // { filename, xml }
+    // Each click starts a new run; a slower, superseded run (e.g. the user switched items and
+    // clicked again mid-export) must not overwrite the panel with its stale item.
+    let runSeq = 0
 
     const openPanel = () => panel.classList.add('open')
     const closePanel = () => panel.classList.remove('open')
@@ -165,6 +168,8 @@
     }
 
     async function run() {
+      const seq = ++runSeq
+      const stale = () => seq !== runSeq
       openPanel()
       resetView()
       setStatus('Reading the open item…')
@@ -172,9 +177,10 @@
       try {
         ctx = await callInjected('getContext')
       } catch (e) {
-        setStatus(e.message, true)
+        if (!stale()) setStatus(e.message, true)
         return
       }
+      if (stale()) return
       if (!ctx.inPackage) {
         showItemMeta(ctx.item, '')
         setStatus('This item is not in any package, so it cannot be exported. Add it to a package first, then export again.')
@@ -195,9 +201,10 @@
       try {
         result = await chrome.runtime.sendMessage({ type: 'qe:export', body: ctx.request })
       } catch (e) {
-        setStatus('Extension messaging error: ' + e.message, true)
+        if (!stale()) setStatus('Extension messaging error: ' + e.message, true)
         return
       }
+      if (stale()) return
       if (!result || !result.ok) {
         setStatus((result && result.error) || 'Export failed.', true)
         showItemMeta(ctx.item, ctx.packageName)

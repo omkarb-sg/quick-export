@@ -90,3 +90,48 @@ test('unpackaged item offers Add-to-package instead of exporting (D-01) @stub', 
   const sent = await page.evaluate(() => (window as any).__sent)
   expect(sent).toBeNull()
 })
+
+test('a superseded export never overwrites the newer one (switch item mid-export) @stub', async ({ page }) => {
+  await page.setContent('<!doctype html><meta charset="utf-8"><title>aras stub</title><body></body>')
+  await page.evaluate(() => {
+    ;(window as any).__quickExportForce = true
+    // Item A is open for the first click, item B for the second; A's export is the slow one.
+    let clicks = 0
+    const items = [
+      { itemType: 'Method', itemId: 'A', configId: 'A', keyedName: 'ItemA' },
+      { itemType: 'Form', itemId: 'B', configId: 'B', keyedName: 'ItemB' }
+    ]
+    ;(window as any).chrome = {
+      runtime: {
+        getURL: () => 'data:text/javascript,void%200',
+        sendMessage: async (msg: any) => {
+          const k = msg.body.item.keyedName
+          await new Promise((r) => setTimeout(r, k === 'ItemA' ? 800 : 50))
+          return { reqId: msg.body.reqId, ok: true, filename: `${k}.xml`, xml: `<AML>${k}</AML>`, engineErrors: 0 }
+        }
+      }
+    }
+    window.addEventListener('message', (ev: any) => {
+      const d = ev.data
+      if (!d || d.__qe !== 'req') return
+      if (d.action === 'hasAras') {
+        window.postMessage({ __qe: 'res', id: d.id, ok: true, result: { hasAras: true } }, '*')
+        return
+      }
+      if (d.action === 'getContext') {
+        const item = items[Math.min(clicks++, 1)]!
+        const request = { reqId: 'r' + clicks, conn: {}, item, options: {} }
+        window.postMessage({ __qe: 'res', id: d.id, ok: true, result: { item, inPackage: true, packageName: 'p', request } }, '*')
+      }
+    })
+  })
+  await page.addScriptTag({ content: CONTENT })
+
+  await page.locator('.btn').click() // item A (slow export)
+  await page.waitForTimeout(100)
+  await page.locator('.btn').click() // user switched to item B and clicked again
+  await page.waitForTimeout(1200) // both exports have now returned, A last
+
+  await expect(page.locator('#quick-export-host .status')).toHaveText('Exported ItemB.xml')
+  await expect(page.locator('#quick-export-host textarea')).toHaveValue('<AML>ItemB</AML>')
+})
