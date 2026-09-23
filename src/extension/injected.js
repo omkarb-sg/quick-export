@@ -10,8 +10,7 @@ import {
   getConnContext,
   resolveCurrentItemFrame,
   readItemFromFrame,
-  buildInPackageQuery,
-  parseInPackageResult,
+  resolvePackaging,
   buildExportRequest
 } from './lib/aras-page.js'
 
@@ -33,14 +32,13 @@ function getContext() {
   if (!aras) throw new Error('Aras client not detected (top.aras missing).')
   const conn = getConnContext(aras)
   const frame = resolveCurrentItemFrame(window.top || window)
-  if (!frame) throw new Error('No item is open. Open an item in a tab, then export.')
+  if (!frame) throw new Error('No item is open in the active tab. Open or switch to an item, then export.')
   const item = readItemFromFrame(frame)
-  const res = aras.IomInnovator.applyAML(buildInPackageQuery(item.configId))
-  const pkg = parseInPackageResult(res)
-  const out = { item, inPackage: pkg.inPackage, packageName: pkg.packageName || '' }
+  const pkg = resolvePackaging((aml) => aras.IomInnovator.applyAML(aml), item)
+  const out = { item, inPackage: pkg.inPackage, packageName: pkg.packageName }
   if (pkg.inPackage) {
     if (!out.packageName) throw new Error('Item is packaged but its PackageDefinition name could not be resolved.')
-    out.request = buildExportRequest(newReqId(), conn, item, out.packageName)
+    out.request = buildExportRequest(newReqId(), conn, pkg.target, out.packageName)
   }
   return out
 }
